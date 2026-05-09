@@ -1,52 +1,68 @@
 # Import python packages
 import streamlit as st
-
-# Write directly to the app
-st.title(f"Customize Your Smoothie! :cup_with_straw: {st.__version__}")
-
-st.write(
-    """Choose the fruits you want in your custom smoothie!"""
-)
-
+import requests
 
 from snowflake.snowpark.functions import col
+from snowflake.snowpark.context import get_active_session
+
+# App title
+st.title(f"Customize Your Smoothie! :cup_with_straw: {st.__version__}")
+
+st.write("Choose the fruits you want in your custom smoothie!")
 
 # Get Snowflake session
 session = get_active_session()
 
 # Query table
-my_dataframe = session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS").select(col('FRUIT_NAME'))
+my_dataframe = session.table(
+    "SMOOTHIES.PUBLIC.FRUIT_OPTIONS"
+).select(col("FRUIT_NAME"))
 
-# Display table
+# Display dataframe
 st.dataframe(my_dataframe, use_container_width=True)
 
+# Input for customer name
 name_on_order = st.text_input("Name on Smoothie:")
-st.write("The name in your Smoothie will be: ", name_on_order)
 
-cnx=st.connection("snowflake")
-session=cnx.session()
+st.write("The name on your Smoothie will be:", name_on_order)
 
-# list data type
+# Convert dataframe column to list
+fruit_list = my_dataframe.to_pandas()["FRUIT_NAME"].tolist()
+
+# Multiselect ingredients
 ingredients_list = st.multiselect(
- 'Choose up to 5 ingredients: ',  my_dataframe, max_selections = 5
+    "Choose up to 5 ingredients:",
+    fruit_list,
+    max_selections=5
 )
 
+# Submit order
 if ingredients_list:
-    ingredients_string = ''
-    
-    for fruit_choosen in ingredients_list:
-        ingredients_string += fruit_choosen + ''
-    # st.write(ingredients_string)
 
-    my_insert_stmt = """ insert into smoothies.public.orders(ingredients)
-                    values ('""" + ingredients_string + """','"""+name_on_order+"""')"""
+    ingredients_string = ", ".join(ingredients_list)
+
+    st.write("Ingredients selected:", ingredients_string)
+
+    # Insert query
+    my_insert_stmt = f"""
+    INSERT INTO smoothies.public.orders
+    (ingredients, name_on_order)
+    VALUES
+    ('{ingredients_string}', '{name_on_order}')
+    """
+
     st.write(my_insert_stmt)
-    st.stop()
-    # time_to_insert=st.button('Submit Order')
-    # if time_to_insert:
-    #     session.sql(my_insert_stmt).collect()
-    #     st.success('Your Smoothie is ordered!', icon="✅")
-import requests  
-smoothiefroot_response = requests.get("[https://my.smoothiefroot.com/api/fruit/watermelon](https://my.smoothiefroot.com/api/fruit/watermelon)")  
-st.text(smoothiefroot_response)
 
+    time_to_insert = st.button("Submit Order")
+
+    if time_to_insert:
+        session.sql(my_insert_stmt).collect()
+        st.success("Your Smoothie is ordered!", icon="✅")
+
+# API request
+smoothiefroot_response = requests.get(
+    "https://my.smoothiefroot.com/api/fruit/watermelon"
+)
+
+# Show API response
+st.write(smoothiefroot_response.json())
